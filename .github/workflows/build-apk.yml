@@ -16,37 +16,13 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Fix permissions
-      run: |
-        mkdir -p /github/home
-        export HOME=/github/home
-
     - name: Build APK
       run: |
-        buildozer android debug
+        echo "y" | buildozer android debug
       env:
         HOME: /github/home
 
     - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: pdf-stamper-apk
-        path: bin/*.apk
-        retention-days: 30
-        
-    - name: Upload build log on failure
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-log
-        path: build.log
-
-    - name: List bin directory
-      run: |
-        ls -la bin/ || true
-
-    - name: Upload APK artifact
-      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: pdf-stamper-apk
