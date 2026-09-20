@@ -22,17 +22,25 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y openjdk-17-jdk build-essential ccache git wget unzip
-        pip install buildozer cython==0.29.36
+        pip install buildozer==1.5.0 cython==0.29.36
 
-    - name: Accept Android licenses
+    - name: Setup Android SDK
       run: |
-        mkdir -p ~/.buildozer/android/platform/android-sdk
-        cd ~/.buildozer/android/platform/android-sdk
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-        unzip -q commandlinetools-linux-9477386_latest.zip
-        mkdir -p cmdline-tools/latest
-        mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
-        yes | cmdline-tools/latest/bin/sdkmanager --licenses || true
+        SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
+        mkdir -p "$SDK_DIR"
+        cd "$SDK_DIR"
+        
+        # Download and extract command line tools
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-8092744_latest.zip -O cmdtools.zip
+        mkdir -p tools
+        unzip -q cmdtools.zip -d tools
+        mv tools/cmdline-tools tools/latest 2>/dev/null || true
+        
+        # Accept licenses
+        yes | tools/latest/bin/sdkmanager --licenses || true
+        
+        # Install components
+        tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0"
 
     - name: Cache Buildozer
       uses: actions/cache@v4
