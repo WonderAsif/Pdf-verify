@@ -18,42 +18,79 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Install dependencies
+    - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y openjdk-17-jdk build-essential ccache git wget unzip
-        pip install buildozer==1.5.0 cython==0.29.36
+        sudo apt-get install -y \
+          python3-pip \
+          openjdk-17-jdk \
+          unzip \
+          zip \
+          git \
+          build-essential \
+          ccache \
+          cmake \
+          libffi-dev \
+          libssl-dev \
+          autoconf \
+          automake \
+          libtool \
+          pkg-config \
+          zlib1g-dev \
+          wget
 
-    - name: Setup Android SDK
+    - name: Setup Android SDK for Buildozer
       run: |
         SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
-        mkdir -p "$SDK_DIR"
-        cd "$SDK_DIR"
         
-        # Download and extract command line tools
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-8092744_latest.zip -O cmdtools.zip
-        mkdir -p tools
-        unzip -q cmdtools.zip -d tools
-        mv tools/cmdline-tools tools/latest 2>/dev/null || true
+        # Create SDK directory structure
+        mkdir -p "$SDK_DIR/cmdline-tools"
+        
+        # Download command line tools
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O /tmp/cmdtools.zip
+        unzip -q /tmp/cmdtools.zip -d /tmp/cmdtools
+        mv /tmp/cmdtools/cmdline-tools "$SDK_DIR/cmdline-tools/latest"
+        
+        # Create old tools directory structure that Buildozer expects
+        mkdir -p "$SDK_DIR/tools/bin"
+        
+        # Create symlink for sdkmanager in the old location
+        cat > "$SDK_DIR/tools/bin/sdkmanager" << 'SCRIPT'
+        #!/bin/bash
+        exec "$HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager" "$@"
+        SCRIPT
+        chmod +x "$SDK_DIR/tools/bin/sdkmanager"
         
         # Accept licenses
-        yes | tools/latest/bin/sdkmanager --licenses || true
+        yes | "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --licenses || true
         
-        # Install components
-        tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0"
+        # Install SDK components
+        "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-33" "build-tools;33.0.0"
 
-    - name: Cache Buildozer
+    - name: Install Buildozer and Cython
+      run: |
+        pip install --upgrade pip
+        pip install buildozer cython==0.29.36
+
+    - name: Cache Buildozer global directory
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
         key: ${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
 
-    - name: Build APK
-      run: buildozer android debug
+    - name: Build APK with Buildozer
+      run: |
+        buildozer android debug
       env:
         BUILDOZER_WARN_ON_ROOT: 0
+        ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
+        ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
 
-    - name: Upload APK
+    - name: List bin directory
+      run: |
+        ls -la bin/
+
+    - name: Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
         name: pdf-stamper-apk
