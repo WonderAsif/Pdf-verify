@@ -8,86 +8,32 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    container:
+      image: kivy/buildozer:latest
+      options: --user root
     
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-
-    - name: Install system dependencies
+    - name: Fix permissions
       run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          python3-pip \
-          openjdk-17-jdk \
-          unzip \
-          zip \
-          git \
-          build-essential \
-          ccache \
-          cmake \
-          libffi-dev \
-          libssl-dev \
-          autoconf \
-          automake \
-          libtool \
-          pkg-config \
-          zlib1g-dev \
-          wget \
-          python3-dev \
-          libncurses5-dev \
-          libsqlite3-dev \
-          libreadline-dev \
-          libtk8.6 \
-          libgdm-dev \
-          libdb4o-cil-dev \
-          libpcap-dev
+        mkdir -p /github/home
+        export HOME=/github/home
 
-    - name: Setup Android SDK
+    - name: Build APK
       run: |
-        SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
-        mkdir -p "$SDK_DIR/cmdline-tools"
-        
-        # Download command line tools
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O /tmp/cmdtools.zip
-        unzip -q /tmp/cmdtools.zip -d /tmp/cmdtools
-        mv /tmp/cmdtools/cmdline-tools "$SDK_DIR/cmdline-tools/latest"
-        
-        # Accept licenses
-        yes | "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --licenses || true
-        
-        # Install SDK components
-        "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-33" "build-tools;33.0.0"
-
-    - name: Install Buildozer and dependencies
-      run: |
-        pip install --upgrade pip
-        pip install buildozer==1.5.0 cython==0.29.36
-        pip install appdirs colorama jinja2 sh meson ninja build toml packaging setuptools wheel
-
-    - name: Update buildozer.spec for CI
-      run: |
-        # Ensure log_level is 2 for debugging
-        sed -i 's/^log_level.*/log_level = 2/' buildozer.spec
-
-    - name: Cache Buildozer global directory
-      uses: actions/cache@v4
-      with:
-        path: ~/.buildozer
-        key: ${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-
-    - name: Build APK with Buildozer
-      run: |
-        buildozer android debug 2>&1 | tee build.log
+        buildozer android debug
       env:
-        BUILDOZER_WARN_ON_ROOT: 0
-        ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
-        ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
+        HOME: /github/home
 
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: pdf-stamper-apk
+        path: bin/*.apk
+        retention-days: 30
+        
     - name: Upload build log on failure
       if: failure()
       uses: actions/upload-artifact@v4
