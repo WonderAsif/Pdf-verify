@@ -119,7 +119,7 @@ def main(page: ft.Page):
     page.padding = 20
     
     uploaded_file_bytes = None
-    file_name_display = ft.Text("No file selected", color=ft.colors.GREY)
+    file_name_display = ft.Text("No file selected", color=ft.Colors.GREY)
 
     def on_file_picked(e: ft.FilePickerResultEvent):
         nonlocal uploaded_file_bytes
@@ -127,7 +127,7 @@ def main(page: ft.Page):
             with open(e.files[0].path, "rb") as f:
                 uploaded_file_bytes = f.read()
             file_name_display.value = f"Selected: {e.files[0].name}"
-            file_name_display.color = ft.colors.BLUE
+            file_name_display.color = ft.Colors.BLUE
             status_text.value = ""
             page.update()
 
@@ -140,7 +140,7 @@ def main(page: ft.Page):
     def apply_stamp(e):
         if uploaded_file_bytes is None:
             status_text.value = "Please select a PDF first."
-            status_text.color = ft.colors.RED
+            status_text.color = ft.Colors.RED
             page.update()
             return
             
@@ -151,24 +151,24 @@ def main(page: ft.Page):
                 with open(out_filename, "wb") as f:
                     f.write(stamped_bytes)
                 status_text.value = f"Success! Saved to Downloads folder."
-                status_text.color = ft.colors.GREEN
+                status_text.color = ft.Colors.GREEN
             else:
                 status_text.value = "Error: No signature field found to replace."
-                status_text.color = ft.colors.RED
+                status_text.color = ft.Colors.RED
         except Exception as ex:
             status_text.value = f"Error: {str(ex)}"
-            status_text.color = ft.colors.RED
+            status_text.color = ft.Colors.RED
         page.update()
 
     page.add(
         ft.Text("PDF Stamper", size=28, weight="bold"),
         ft.Text("Injects the green tick exactly into the signature block."),
         ft.Divider(),
-        ft.ElevatedButton("1. Choose a PDF file", icon=ft.icons.UPLOAD_FILE, on_click=lambda _: file_picker.pick_files(allow_multiple=False, allowed_extensions=["pdf"])),
+        ft.ElevatedButton("1. Choose a PDF file", icon=ft.Icons.UPLOAD_FILE, on_click=lambda _: file_picker.pick_files(allow_multiple=False, allowed_extensions=["pdf"])),
         file_name_display,
         password_input,
-        ft.ElevatedButton("2. Apply Stamp", icon=ft.icons.CHECK_CIRCLE, on_click=apply_stamp, bgcolor=ft.colors.GREEN_700, color=ft.colors.WHITE),
+        ft.ElevatedButton("2. Apply Stamp", icon=ft.Icons.CHECK_CIRCLE, on_click=apply_stamp, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE),
         status_text
     )
 
-ft.app(target=main)
+ft.run(main)
