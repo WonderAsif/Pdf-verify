@@ -3,8 +3,6 @@ name: Build Android APK
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -20,96 +18,37 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Install system dependencies
+    - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y \
-          python3-pip \
-          openjdk-17-jdk \
-          unzip \
-          zip \
-          git \
-          build-essential \
-          ccache \
-          cmake \
-          libffi-dev \
-          libssl-dev \
-          autoconf \
-          automake \
-          libtool \
-          pkg-config \
-          zlib1g-dev \
-          wget
-
-    - name: Setup Android SDK
-      run: |
-        # Create SDK directory
-        mkdir -p $HOME/android-sdk/cmdline-tools
-        
-        # Download command line tools
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O /tmp/cmdtools.zip
-        
-        # Extract and organize
-        unzip -q /tmp/cmdtools.zip -d /tmp/cmdtools
-        mv /tmp/cmdtools/cmdline-tools $HOME/android-sdk/cmdline-tools/latest
-        
-        # Set environment variables
-        echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
-        echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
-        echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
-        echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
-        
-        # Verify sdkmanager exists
-        ls -la $HOME/android-sdk/cmdline-tools/latest/bin/
-
-    - name: Install Android SDK components
-      run: |
-        # Accept licenses
-        yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
-        
-        # Install required components
-        $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0"
-
-    - name: Install Buildozer and Cython
-      run: |
-        pip install --upgrade pip
+        sudo apt-get install -y openjdk-17-jdk build-essential ccache git wget unzip
         pip install buildozer cython==0.29.36
 
-    - name: Cache Buildozer global directory
+    - name: Accept Android licenses
+      run: |
+        mkdir -p ~/.buildozer/android/platform/android-sdk
+        cd ~/.buildozer/android/platform/android-sdk
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+        unzip -q commandlinetools-linux-9477386_latest.zip
+        mkdir -p cmdline-tools/latest
+        mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
+        yes | cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+    - name: Cache Buildozer
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
         key: ${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
 
-    - name: Build APK with Buildozer
-      run: |
-        buildozer android debug
+    - name: Build APK
+      run: buildozer android debug
       env:
         BUILDOZER_WARN_ON_ROOT: 0
-        ANDROID_HOME: ${{ env.ANDROID_HOME }}
-        ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
 
-    - name: List bin directory
-      run: |
-        ls -la bin/
-
-    - name: Upload APK artifact
+    - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: pdf-stamper-apk
         path: bin/*.apk
         retention-days: 30
-
-    - name: Create Release
-      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-      uses: softprops/action-gh-release@v2
-      with:
-        name: PDF Stamper v${{ github.run_number }}
-        tag_name: v${{ github.run_number }}
-        files: bin/*.apk
-        draft: false
-        prerelease: false
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         
