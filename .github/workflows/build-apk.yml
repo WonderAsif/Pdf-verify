@@ -37,13 +37,19 @@ jobs:
           libtool \
           pkg-config \
           zlib1g-dev \
-          wget
+          wget \
+          python3-dev \
+          libncurses5-dev \
+          libsqlite3-dev \
+          libreadline-dev \
+          libtk8.6 \
+          libgdm-dev \
+          libdb4o-cil-dev \
+          libpcap-dev
 
-    - name: Setup Android SDK for Buildozer
+    - name: Setup Android SDK
       run: |
         SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
-        
-        # Create SDK directory structure
         mkdir -p "$SDK_DIR/cmdline-tools"
         
         # Download command line tools
@@ -51,26 +57,22 @@ jobs:
         unzip -q /tmp/cmdtools.zip -d /tmp/cmdtools
         mv /tmp/cmdtools/cmdline-tools "$SDK_DIR/cmdline-tools/latest"
         
-        # Create old tools directory structure that Buildozer expects
-        mkdir -p "$SDK_DIR/tools/bin"
-        
-        # Create symlink for sdkmanager in the old location
-        cat > "$SDK_DIR/tools/bin/sdkmanager" << 'SCRIPT'
-        #!/bin/bash
-        exec "$HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager" "$@"
-        SCRIPT
-        chmod +x "$SDK_DIR/tools/bin/sdkmanager"
-        
         # Accept licenses
         yes | "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --licenses || true
         
         # Install SDK components
         "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-33" "build-tools;33.0.0"
 
-    - name: Install Buildozer and Cython
+    - name: Install Buildozer and dependencies
       run: |
         pip install --upgrade pip
-        pip install buildozer cython==0.29.36
+        pip install buildozer==1.5.0 cython==0.29.36
+        pip install appdirs colorama jinja2 sh meson ninja build toml packaging setuptools wheel
+
+    - name: Update buildozer.spec for CI
+      run: |
+        # Ensure log_level is 2 for debugging
+        sed -i 's/^log_level.*/log_level = 2/' buildozer.spec
 
     - name: Cache Buildozer global directory
       uses: actions/cache@v4
@@ -80,17 +82,25 @@ jobs:
 
     - name: Build APK with Buildozer
       run: |
-        buildozer android debug
+        buildozer android debug 2>&1 | tee build.log
       env:
         BUILDOZER_WARN_ON_ROOT: 0
         ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
         ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
 
+    - name: Upload build log on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-log
+        path: build.log
+
     - name: List bin directory
       run: |
-        ls -la bin/
+        ls -la bin/ || true
 
     - name: Upload APK artifact
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: pdf-stamper-apk
