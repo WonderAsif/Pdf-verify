@@ -164,10 +164,10 @@ def main(page: ft.Page):
         ft.Text("PDF Stamper", size=28, weight="bold"),
         ft.Text("Injects the green tick exactly into the signature block."),
         ft.Divider(),
-        ft.ElevatedButton("1. Choose a PDF file", icon=ft.Icons.UPLOAD_FILE, on_click=lambda _: file_picker.pick_files(allow_multiple=False, allowed_extensions=["pdf"])),
+        ft.Button(content="1. Choose a PDF file", icon=ft.Icons.UPLOAD_FILE, on_click=lambda _: file_picker.pick_files(allow_multiple=False, allowed_extensions=["pdf"])),
         file_name_display,
         password_input,
-        ft.ElevatedButton("2. Apply Stamp", icon=ft.Icons.CHECK_CIRCLE, on_click=apply_stamp, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE),
+        ft.Button(content="2. Apply Stamp", icon=ft.Icons.CHECK_CIRCLE, on_click=apply_stamp),
         status_text
     )
 
