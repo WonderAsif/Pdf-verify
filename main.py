@@ -131,7 +131,9 @@ def main(page: ft.Page):
             status_text.value = ""
             page.update()
 
-    file_picker = ft.FilePicker(on_result=on_file_picked)
+    # Initialize FilePicker correctly for Flet 1.0 background overlay
+    file_picker = ft.FilePicker()
+    file_picker.on_result = on_file_picked
     page.overlay.append(file_picker)
 
     password_input = ft.TextField(label="PDF Password (optional)", password=True, width=300)
@@ -164,10 +166,10 @@ def main(page: ft.Page):
         ft.Text("PDF Stamper", size=28, weight="bold"),
         ft.Text("Injects the green tick exactly into the signature block."),
         ft.Divider(),
-        ft.Button(content="1. Choose a PDF file", icon=ft.Icons.UPLOAD_FILE, on_click=lambda _: file_picker.pick_files(allow_multiple=False, allowed_extensions=["pdf"])),
+        ft.ElevatedButton(text="1. Choose a PDF file", icon=ft.Icons.UPLOAD_FILE, on_click=lambda _: file_picker.pick_files(allow_multiple=False, allowed_extensions=["pdf"])),
         file_name_display,
         password_input,
-        ft.Button(content="2. Apply Stamp", icon=ft.Icons.CHECK_CIRCLE, on_click=apply_stamp),
+        ft.ElevatedButton(text="2. Apply Stamp", icon=ft.Icons.CHECK_CIRCLE, on_click=apply_stamp, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE),
         status_text
     )
 
