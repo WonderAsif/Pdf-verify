@@ -1,0 +1,68 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Generate Android Boilerplate
+        run: flutter create --org com.example.pdfstamp . --platforms android
+
+      - name: Inject Chaquopy Gradle Configuration
+        run: |
+          # Register Chaquopy globally
+          sed -i 's/id("dev.flutter.flutter-plugin-loader") version "1.0.0"/id("dev.flutter.flutter-plugin-loader") version "1.0.0"\n    id("com.chaquo.python") version "15.0.0" apply false/g' android/settings.gradle.kts
+          
+          # Apply Chaquopy to App module
+          sed -i 's/id("dev.flutter.flutter-gradle-plugin")/id("dev.flutter.flutter-gradle-plugin")\n    id("com.chaquo.python")/g' android/app/build.gradle.kts
+          
+          # Append Python parameters
+          cat <<EOF >> android/app/build.gradle.kts
+          
+          chaquopy {
+              defaultConfig {
+                  buildPython("python3")
+                  pip {
+                      install("pypdf")
+                  }
+              }
+          }
+          EOF
+          
+          # Force App module NDK compatibility
+          sed -i 's/defaultConfig {/defaultConfig {\n        ndk { abiFilters += setOf("armeabi-v7a", "arm64-v8a", "x86_64") }/g' android/app/build.gradle.kts
+
+      - name: Patch SDK Versions for file_picker
+        run: |
+          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' android/app/build.gradle.kts || true
+          find /home/runner/.pub-cache/hosted/pub.dev/ -name "build.gradle" -exec sed -i 's/compileSdkVersion [0-9]*/compileSdkVersion 36/g' {} +
+          find /home/runner/.pub-cache/hosted/pub.dev/ -name "build.gradle" -exec sed -i 's/compileSdk [0-9]*/compileSdk 36/g' {} +
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
