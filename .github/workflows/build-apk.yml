@@ -53,9 +53,9 @@ jobs:
           perms = '<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>\n<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>\n<uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>\n<application'
           patch_file("android/app/src/main/AndroidManifest.xml", '<application', perms)
 
-          main_activity_paths = glob.glob("android/app/src/main/kotlin/**/MainActivity.kt", recursive=True)
-          if main_activity_paths:
-              with open(main_activity_paths[0], "r") as f:
+          # FIX: Loop through ALL found MainActivity files to guarantee the active one gets patched
+          for path in glob.glob("android/app/src/main/kotlin/**/MainActivity.kt", recursive=True):
+              with open(path, "r") as f:
                   pkg = f.read().splitlines()[0]
               
               code = pkg + '\n\n' + \
@@ -94,7 +94,7 @@ jobs:
                      '    }\n' + \
                      '}\n'
               
-              with open(main_activity_paths[0], "w") as f:
+              with open(path, "w") as f:
                   f.write(code)
           EOF
           
