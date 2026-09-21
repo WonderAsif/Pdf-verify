@@ -49,8 +49,8 @@ jobs:
           """
           settings = settings.replace("pluginManagement {", "pluginManagement {" + strategy)
           
-          # 3. Register Plugin
-          settings = settings.replace("id(\"dev.flutter.flutter-plugin-loader\") version \"1.0.0\"", "id(\"dev.flutter.flutter-plugin-loader\") version \"1.0.0\"\n    id(\"com.chaquo.python\") version \"15.0.0\" apply false")
+          # 3. Register Plugin (FIX: 14.0.2 is the correct, existing version)
+          settings = settings.replace("id(\"dev.flutter.flutter-plugin-loader\") version \"1.0.0\"", "id(\"dev.flutter.flutter-plugin-loader\") version \"1.0.0\"\n    id(\"com.chaquo.python\") version \"14.0.2\" apply false")
 
           with open(settings_path, "w") as f:
               f.write(settings)
