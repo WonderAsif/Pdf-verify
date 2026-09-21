@@ -27,13 +27,16 @@ jobs:
 
       - name: Inject Chaquopy Gradle Configuration
         run: |
-          # Register Chaquopy globally
+          # 1. Add Chaquopy Maven Repository to download the plugin
+          sed -i 's/mavenCentral()/mavenCentral()\n        maven { url = uri("https:\/\/chaquo.com\/maven") }/g' android/settings.gradle.kts
+          
+          # 2. Register Chaquopy globally
           sed -i 's/id("dev.flutter.flutter-plugin-loader") version "1.0.0"/id("dev.flutter.flutter-plugin-loader") version "1.0.0"\n    id("com.chaquo.python") version "15.0.0" apply false/g' android/settings.gradle.kts
           
-          # Apply Chaquopy to App module
+          # 3. Apply Chaquopy to App module
           sed -i 's/id("dev.flutter.flutter-gradle-plugin")/id("dev.flutter.flutter-gradle-plugin")\n    id("com.chaquo.python")/g' android/app/build.gradle.kts
           
-          # Append Python parameters
+          # 4. Append Python parameters
           cat <<EOF >> android/app/build.gradle.kts
           
           chaquopy {
@@ -46,7 +49,7 @@ jobs:
           }
           EOF
           
-          # Force App module NDK compatibility
+          # 5. Force App module NDK compatibility
           sed -i 's/defaultConfig {/defaultConfig {\n        ndk { abiFilters += setOf("armeabi-v7a", "arm64-v8a", "x86_64") }/g' android/app/build.gradle.kts
 
       - name: Patch SDK Versions for file_picker
