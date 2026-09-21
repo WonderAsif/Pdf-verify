@@ -32,104 +32,73 @@ jobs:
 
       - name: Inject Code and Permissions
         run: |
-          cat << 'EOF' > patch_gradle.py
+          cat << 'EOF' > patch.py
           import os
           import glob
 
-          settings_path = "android/settings.gradle.kts"
-          with open(settings_path, "r") as f:
-              settings = f.read()
-          settings = settings.replace("id(\"dev.flutter.flutter-plugin-loader\") version \"1.0.0\"", "id(\"dev.flutter.flutter-plugin-loader\") version \"1.0.0\"\n    id(\"com.chaquo.python\") version \"17.0.0\" apply false")
-          with open(settings_path, "w") as f:
-              f.write(settings)
+          def patch_file(path, old, new):
+              if os.path.exists(path):
+                  with open(path, "r") as f:
+                      content = f.read()
+                  with open(path, "w") as f:
+                      f.write(content.replace(old, new))
 
-          app_build_path = "android/app/build.gradle.kts"
-          with open(app_build_path, "r") as f:
-              app_build = f.read()
-          app_build = app_build.replace("id(\"dev.flutter.flutter-gradle-plugin\")", "id(\"dev.flutter.flutter-gradle-plugin\")\n    id(\"com.chaquo.python\")")
-          app_build = app_build.replace("defaultConfig {", "defaultConfig {\n        ndk { abiFilters += setOf(\"armeabi-v7a\", \"arm64-v8a\", \"x86_64\") }")
-          app_build += """
-          chaquopy {
-              defaultConfig {
-                  buildPython("python3")
-                  pip {
-                      install("pypdf")
-                  }
-              }
-          }
-          """
-          with open(app_build_path, "w") as f:
-              f.write(app_build)
-              
-          manifest_path = "android/app/src/main/AndroidManifest.xml"
-          with open(manifest_path, "r") as f:
-              manifest = f.read()
+          patch_file("android/settings.gradle.kts", 'id("dev.flutter.flutter-plugin-loader") version "1.0.0"', 'id("dev.flutter.flutter-plugin-loader") version "1.0.0"\n    id("com.chaquo.python") version "17.0.0" apply false')
+          patch_file("android/app/build.gradle.kts", 'id("dev.flutter.flutter-gradle-plugin")', 'id("dev.flutter.flutter-gradle-plugin")\n    id("com.chaquo.python")')
+          patch_file("android/app/build.gradle.kts", 'defaultConfig {', 'defaultConfig {\n        ndk { abiFilters += setOf("armeabi-v7a", "arm64-v8a", "x86_64") }')
           
-          permissions = """
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
-          """
-          manifest = manifest.replace("<application", permissions + "\n    <application")
-          with open(manifest_path, "w") as f:
-              f.write(manifest)
-              
+          with open("android/app/build.gradle.kts", "a") as f:
+              f.write('\nchaquopy {\n    defaultConfig {\n        buildPython("python3")\n        pip {\n            install("pypdf")\n        }\n    }\n}\n')
+
+          perms = '<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>\n<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>\n<uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>\n<application'
+          patch_file("android/app/src/main/AndroidManifest.xml", '<application', perms)
+
           main_activity_paths = glob.glob("android/app/src/main/kotlin/**/MainActivity.kt", recursive=True)
           if main_activity_paths:
-              main_path = main_activity_paths[0]
-              with open(main_path, "r") as f:
-                  content = f.read()
+              with open(main_activity_paths[0], "r") as f:
+                  pkg = f.read().splitlines()[0]
               
-              package_line = content.splitlines()[0]
+              code = pkg + '\n\n' + \
+                     'import com.chaquo.python.Python\n' + \
+                     'import com.chaquo.python.android.AndroidPlatform\n' + \
+                     'import io.flutter.embedding.android.FlutterActivity\n' + \
+                     'import io.flutter.embedding.engine.FlutterEngine\n' + \
+                     'import io.flutter.plugin.common.MethodChannel\n\n' + \
+                     'class MainActivity: FlutterActivity() {\n' + \
+                     '    private val CHANNEL = "com.example.pdfstamp/python"\n\n' + \
+                     '    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {\n' + \
+                     '        super.configureFlutterEngine(flutterEngine)\n' + \
+                     '        if (!Python.isStarted()) {\n' + \
+                     '            Python.start(AndroidPlatform(this))\n' + \
+                     '        }\n' + \
+                     '        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->\n' + \
+                     '            if (call.method == "stampPdf") {\n' + \
+                     '                val inputBytes = call.argument<ByteArray>("pdfBytes")\n' + \
+                     '                val password = call.argument<String>("password") ?: ""\n' + \
+                     '                try {\n' + \
+                     '                    val py = Python.getInstance()\n' + \
+                     '                    val module = py.getModule("stamper")\n' + \
+                     '                    val resultBytes = module.callAttr("flawless_exact_tick_injection", inputBytes, password).toJava(ByteArray::class.java)\n' + \
+                     '                    if (resultBytes != null) {\n' + \
+                     '                        result.success(resultBytes)\n' + \
+                     '                    } else {\n' + \
+                     '                        result.error("NO_SIGNATURE", "No signature field found.", null)\n' + \
+                     '                    }\n' + \
+                     '                } catch (e: Exception) {\n' + \
+                     '                    result.error("PYTHON_ERROR", e.message, null)\n' + \
+                     '                }\n' + \
+                     '            } else {\n' + \
+                     '                result.notImplemented()\n' + \
+                     '            }\n' + \
+                     '        }\n' + \
+                     '    }\n' + \
+                     '}\n'
               
-              kotlin_code = package_line + """
-
-import com.chaquo.python.Python
-import com.chaquo.python.android.AndroidPlatform
-import io.flutter.embedding.android.FlutterActivity
-import io.flutter.embedding.engine.FlutterEngine
-import io.flutter.plugin.common.MethodChannel
-
-class MainActivity: FlutterActivity() {
-    private val CHANNEL = "com.example.pdfstamp/python"
-
-    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-        super.configureFlutterEngine(flutterEngine)
-        
-        if (!Python.isStarted()) {
-            Python.start(AndroidPlatform(this))
-        }
-
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
-            if (call.method == "stampPdf") {
-                val inputBytes = call.argument<ByteArray>("pdfBytes")
-                val password = call.argument<String>("password") ?: ""
-                
-                try {
-                    val py = Python.getInstance()
-                    val module = py.getModule("stamper") 
-                    val resultBytes = module.callAttr("flawless_exact_tick_injection", inputBytes, password).toJava(ByteArray::class.java)
-                    
-                    if (resultBytes != null) {
-                        result.success(resultBytes)
-                    } else {
-                        result.error("NO_SIGNATURE", "No signature field found.", null)
-                    }
-                } catch (e: Exception) {
-                    result.error("PYTHON_ERROR", e.message, null)
-                }
-            } else {
-                result.notImplemented()
-            }
-        }
-    }
-}
-"""
-              with open(main_path, "w") as f:
-                  f.write(kotlin_code)
+              with open(main_activity_paths[0], "w") as f:
+                  f.write(code)
           EOF
           
-          python3 patch_gradle.py
+          python3 patch.py
 
       - name: Patch SDK Versions for Plugins
         run: |
