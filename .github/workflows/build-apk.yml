@@ -27,18 +27,46 @@ jobs:
 
       - name: Inject Chaquopy Gradle Configuration
         run: |
-          # 1. Add Chaquopy Maven Repository to download the plugin
-          sed -i 's/mavenCentral()/mavenCentral()\n        maven { url = uri("https:\/\/chaquo.com\/maven") }/g' android/settings.gradle.kts
+          # Use a python script to safely patch Gradle files without regex errors
+          cat << 'EOF' > patch_gradle.py
+          import os
+
+          settings_path = "android/settings.gradle.kts"
+          with open(settings_path, "r") as f:
+              settings = f.read()
+
+          # 1. Add Maven Repo
+          settings = settings.replace("mavenCentral()", "mavenCentral()\n        maven { url = uri(\"https://chaquo.com/maven\") }")
+
+          # 2. Add Resolution Strategy to map the plugin correctly
+          strategy = """
+      resolutionStrategy {
+          eachPlugin {
+              if (requested.id.id == "com.chaquo.python") {
+                  useModule("com.chaquo.python:gradle:${requested.version}")
+              }
+          }
+      }
+          """
+          settings = settings.replace("pluginManagement {", "pluginManagement {" + strategy)
           
-          # 2. Register Chaquopy globally
-          sed -i 's/id("dev.flutter.flutter-plugin-loader") version "1.0.0"/id("dev.flutter.flutter-plugin-loader") version "1.0.0"\n    id("com.chaquo.python") version "15.0.0" apply false/g' android/settings.gradle.kts
-          
-          # 3. Apply Chaquopy to App module
-          sed -i 's/id("dev.flutter.flutter-gradle-plugin")/id("dev.flutter.flutter-gradle-plugin")\n    id("com.chaquo.python")/g' android/app/build.gradle.kts
-          
-          # 4. Append Python parameters
-          cat <<EOF >> android/app/build.gradle.kts
-          
+          # 3. Register Plugin
+          settings = settings.replace("id(\"dev.flutter.flutter-plugin-loader\") version \"1.0.0\"", "id(\"dev.flutter.flutter-plugin-loader\") version \"1.0.0\"\n    id(\"com.chaquo.python\") version \"15.0.0\" apply false")
+
+          with open(settings_path, "w") as f:
+              f.write(settings)
+
+
+          app_build_path = "android/app/build.gradle.kts"
+          with open(app_build_path, "r") as f:
+              app_build = f.read()
+
+          # 4. Apply Plugin to App & Set NDK Filters
+          app_build = app_build.replace("id(\"dev.flutter.flutter-gradle-plugin\")", "id(\"dev.flutter.flutter-gradle-plugin\")\n    id(\"com.chaquo.python\")")
+          app_build = app_build.replace("defaultConfig {", "defaultConfig {\n        ndk { abiFilters += setOf(\"armeabi-v7a\", \"arm64-v8a\", \"x86_64\") }")
+
+          # 5. Append Python Build Rules
+          app_build += """
           chaquopy {
               defaultConfig {
                   buildPython("python3")
@@ -47,10 +75,13 @@ jobs:
                   }
               }
           }
+          """
+          with open(app_build_path, "w") as f:
+              f.write(app_build)
           EOF
           
-          # 5. Force App module NDK compatibility
-          sed -i 's/defaultConfig {/defaultConfig {\n        ndk { abiFilters += setOf("armeabi-v7a", "arm64-v8a", "x86_64") }/g' android/app/build.gradle.kts
+          # Execute the patcher
+          python3 patch_gradle.py
 
       - name: Patch SDK Versions for file_picker
         run: |
