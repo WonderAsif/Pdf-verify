@@ -30,30 +30,24 @@ jobs:
       - name: Generate Android Boilerplate
         run: flutter create --org com.example.pdfstamp . --platforms android
 
-      - name: Inject Chaquopy Gradle Configuration
+      - name: Inject Code and Permissions
         run: |
           cat << 'EOF' > patch_gradle.py
           import os
+          import glob
 
           settings_path = "android/settings.gradle.kts"
           with open(settings_path, "r") as f:
               settings = f.read()
-          
-          # 1. Register Plugin (Version 17.0.0 natively supports Gradle 8)
           settings = settings.replace("id(\"dev.flutter.flutter-plugin-loader\") version \"1.0.0\"", "id(\"dev.flutter.flutter-plugin-loader\") version \"1.0.0\"\n    id(\"com.chaquo.python\") version \"17.0.0\" apply false")
-
           with open(settings_path, "w") as f:
               f.write(settings)
 
           app_build_path = "android/app/build.gradle.kts"
           with open(app_build_path, "r") as f:
               app_build = f.read()
-
-          # 2. Apply Plugin to App & Set NDK Filters
           app_build = app_build.replace("id(\"dev.flutter.flutter-gradle-plugin\")", "id(\"dev.flutter.flutter-gradle-plugin\")\n    id(\"com.chaquo.python\")")
           app_build = app_build.replace("defaultConfig {", "defaultConfig {\n        ndk { abiFilters += setOf(\"armeabi-v7a\", \"arm64-v8a\", \"x86_64\") }")
-
-          # 3. Append Python Build Rules
           app_build += """
           chaquopy {
               defaultConfig {
@@ -66,12 +60,78 @@ jobs:
           """
           with open(app_build_path, "w") as f:
               f.write(app_build)
+              
+          manifest_path = "android/app/src/main/AndroidManifest.xml"
+          with open(manifest_path, "r") as f:
+              manifest = f.read()
+          
+          permissions = """
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
+          """
+          manifest = manifest.replace("<application", permissions + "\n    <application")
+          with open(manifest_path, "w") as f:
+              f.write(manifest)
+              
+          main_activity_paths = glob.glob("android/app/src/main/kotlin/**/MainActivity.kt", recursive=True)
+          if main_activity_paths:
+              main_path = main_activity_paths[0]
+              with open(main_path, "r") as f:
+                  content = f.read()
+              
+              package_line = content.splitlines()[0]
+              
+              kotlin_code = package_line + """
+
+import com.chaquo.python.Python
+import com.chaquo.python.android.AndroidPlatform
+import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
+
+class MainActivity: FlutterActivity() {
+    private val CHANNEL = "com.example.pdfstamp/python"
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        
+        if (!Python.isStarted()) {
+            Python.start(AndroidPlatform(this))
+        }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+            if (call.method == "stampPdf") {
+                val inputBytes = call.argument<ByteArray>("pdfBytes")
+                val password = call.argument<String>("password") ?: ""
+                
+                try {
+                    val py = Python.getInstance()
+                    val module = py.getModule("stamper") 
+                    val resultBytes = module.callAttr("flawless_exact_tick_injection", inputBytes, password).toJava(ByteArray::class.java)
+                    
+                    if (resultBytes != null) {
+                        result.success(resultBytes)
+                    } else {
+                        result.error("NO_SIGNATURE", "No signature field found.", null)
+                    }
+                } catch (e: Exception) {
+                    result.error("PYTHON_ERROR", e.message, null)
+                }
+            } else {
+                result.notImplemented()
+            }
+        }
+    }
+}
+"""
+              with open(main_path, "w") as f:
+                  f.write(kotlin_code)
           EOF
           
-          # Execute the patcher
           python3 patch_gradle.py
 
-      - name: Patch SDK Versions for file_picker
+      - name: Patch SDK Versions for Plugins
         run: |
           sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' android/app/build.gradle.kts || true
           find /home/runner/.pub-cache/hosted/pub.dev/ -name "build.gradle" -exec sed -i 's/compileSdkVersion [0-9]*/compileSdkVersion 36/g' {} +
