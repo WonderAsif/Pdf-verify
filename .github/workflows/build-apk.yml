@@ -27,7 +27,6 @@ jobs:
 
       - name: Inject Chaquopy Gradle Configuration
         run: |
-          # Use a python script to safely patch Gradle files without regex errors
           cat << 'EOF' > patch_gradle.py
           import os
 
@@ -40,13 +39,13 @@ jobs:
 
           # 2. Add Resolution Strategy to map the plugin correctly
           strategy = """
-      resolutionStrategy {
-          eachPlugin {
-              if (requested.id.id == "com.chaquo.python") {
-                  useModule("com.chaquo.python:gradle:${requested.version}")
+              resolutionStrategy {
+                  eachPlugin {
+                      if (requested.id.id == "com.chaquo.python") {
+                          useModule("com.chaquo.python:gradle:${requested.version}")
+                      }
+                  }
               }
-          }
-      }
           """
           settings = settings.replace("pluginManagement {", "pluginManagement {" + strategy)
           
@@ -55,7 +54,6 @@ jobs:
 
           with open(settings_path, "w") as f:
               f.write(settings)
-
 
           app_build_path = "android/app/build.gradle.kts"
           with open(app_build_path, "r") as f:
