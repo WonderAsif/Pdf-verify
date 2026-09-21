@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 void main() => runApp(const MyApp());
 
@@ -37,11 +37,33 @@ class _PdfStamperHomeState extends State<PdfStamperHome> {
     super.dispose();
   }
 
+  Future<bool> _requestPermissions() async {
+    if (Platform.isAndroid) {
+      if (await Permission.manageExternalStorage.isGranted) return true;
+      var status = await Permission.manageExternalStorage.request();
+      if (status.isGranted) return true;
+      var legacyStatus = await Permission.storage.request();
+      return legacyStatus.isGranted;
+    }
+    return true;
+  }
+
   Future<void> _processPdfNatively() async {
     setState(() {
-      _status = 'Selecting file...';
+      _status = 'Requesting storage permissions...';
       _isProcessing = true;
     });
+
+    bool hasPermission = await _requestPermissions();
+    if (!hasPermission) {
+      setState(() { 
+        _status = '✗ Error: Storage permission required to save anywhere.'; 
+        _isProcessing = false; 
+      });
+      return;
+    }
+
+    setState(() => _status = 'Selecting PDF file...');
 
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -56,6 +78,7 @@ class _PdfStamperHomeState extends State<PdfStamperHome> {
       setState(() => _status = 'Processing in offline Python...');
 
       File file = File(result.files.single.path!);
+      String fileName = file.path.split('/').last.replaceAll('.pdf', '_stamped.pdf');
       Uint8List bytes = await file.readAsBytes();
       
       final Uint8List stampedBytes = await platform.invokeMethod('stampPdf', {
@@ -63,10 +86,18 @@ class _PdfStamperHomeState extends State<PdfStamperHome> {
         'password': _passwordController.text,
       });
 
-      Directory? outputDir = await getDownloadsDirectory(); 
-      String fileName = file.path.split('/').last.replaceAll('.pdf', '_stamped.pdf');
-      String outputPath = '${outputDir!.path}/$fileName';
-      
+      setState(() => _status = 'Select where to save the output...');
+
+      String? selectedDirectory = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: 'Select folder to save stamped PDF',
+      );
+
+      if (selectedDirectory == null) {
+        setState(() { _status = 'Save cancelled by user'; _isProcessing = false; });
+        return;
+      }
+
+      String outputPath = '$selectedDirectory/$fileName';
       await File(outputPath).writeAsBytes(stampedBytes);
 
       setState(() {
