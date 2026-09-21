@@ -1,149 +1,90 @@
-import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:permission_handler/permission_handler.dart';
 
-void main() => runApp(const MyApp());
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Offline Python Stamper',
-      theme: ThemeData(primarySwatch: Colors.blue),
-      home: const PdfStamperHome(),
-    );
-  }
-}
-
-class PdfStamperHome extends StatefulWidget {
-  const PdfStamperHome({super.key});
-  @override
-  State<PdfStamperHome> createState() => _PdfStamperHomeState();
-}
-
-class _PdfStamperHomeState extends State<PdfStamperHome> {
-  static const platform = MethodChannel('com.example.pdfstamp/python');
-  
-  String _status = 'Ready to process';
-  bool _isProcessing = false;
-  final TextEditingController _passwordController = TextEditingController();
-
-  @override
-  void dispose() {
-    _passwordController.dispose();
-    super.dispose();
-  }
-
-  Future<bool> _requestPermissions() async {
-    if (Platform.isAndroid) {
-      if (await Permission.manageExternalStorage.isGranted) return true;
-      var status = await Permission.manageExternalStorage.request();
-      if (status.isGranted) return true;
-      var legacyStatus = await Permission.storage.request();
-      return legacyStatus.isGranted;
-    }
-    return true;
-  }
-
-  Future<void> _processPdfNatively() async {
-    setState(() {
-      _status = 'Requesting storage permissions...';
-      _isProcessing = true;
-    });
-
-    bool hasPermission = await _requestPermissions();
-    if (!hasPermission) {
-      setState(() { 
-        _status = '✗ Error: Storage permission required to save anywhere.'; 
-        _isProcessing = false; 
-      });
-      return;
-    }
-
-    setState(() => _status = 'Selecting PDF file...');
-
-    try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom, allowedExtensions: ['pdf'],
-      );
-
-      if (result == null) {
-        setState(() { _status = 'Cancelled'; _isProcessing = false; });
-        return;
-      }
-
-      setState(() => _status = 'Processing in offline Python...');
-
-      File file = File(result.files.single.path!);
-      String fileName = file.path.split('/').last.replaceAll('.pdf', '_stamped.pdf');
-      Uint8List bytes = await file.readAsBytes();
-      
-      final Uint8List stampedBytes = await platform.invokeMethod('stampPdf', {
-        'pdfBytes': bytes,
-        'password': _passwordController.text,
-      });
-
-      setState(() => _status = 'Select where to save the output...');
-
-      String? selectedDirectory = await FilePicker.platform.getDirectoryPath(
-        dialogTitle: 'Select folder to save stamped PDF',
-      );
-
-      if (selectedDirectory == null) {
-        setState(() { _status = 'Save cancelled by user'; _isProcessing = false; });
-        return;
-      }
-
-      String outputPath = '$selectedDirectory/$fileName';
-      await File(outputPath).writeAsBytes(stampedBytes);
-
-      setState(() {
-        _status = '✓ Success!\n\nSaved to: $outputPath';
-        _isProcessing = false;
-      });
-
-    } catch (e) {
-      setState(() { _status = '✗ Error: $e'; _isProcessing = false; });
-    }
-  }
-
+class GlassmorphismUI extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Offline Python Stamper')),
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(_status, textAlign: TextAlign.center),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: 300,
-                child: TextField(
-                  controller: _passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'PDF Password (Optional)',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.lock),
+      body: Stack(
+        children: [
+          // 1. A colorful background is required for the glass effect to be visible
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF8A2387), Color(0xFFE94057), Color(0xFFF27121)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
+          
+          // 2. The Frosted Glass Container
+          Center(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                child: Container(
+                  width: 320,
+                  padding: const EdgeInsets.all(32),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15), // Semi-transparent white
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.3), // Light border for the glass edge
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        "Ready to process",
+                        style: TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                      const SizedBox(height: 24),
+                      
+                      // Your TextField
+                      TextField(
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: "PDF Password (Optional)",
+                          hintStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
+                          prefixIcon: const Icon(Icons.lock_outline, color: Colors.white),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.white.withOpacity(0.4)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.white),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      
+                      // Your Button
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white.withOpacity(0.2),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(color: Colors.white.withOpacity(0.3)),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                        ),
+                        onPressed: () {},
+                        child: const Text("Select & Stamp PDF"),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _isProcessing ? null : _processPdfNatively,
-                child: _isProcessing 
-                  ? const CircularProgressIndicator() 
-                  : const Text('Select & Stamp PDF'),
-              ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
